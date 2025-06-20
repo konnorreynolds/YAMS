@@ -31,6 +31,7 @@ import java.util.Optional;
 import yams.exceptions.SmartMotorControllerConfigurationException;
 import yams.gearing.MechanismGearing;
 import yams.telemetry.SmartMotorControllerTelemetry;
+import yams.telemetry.SmartMotorControllerTelemetryConfig;
 
 public abstract class SmartMotorController
 {
@@ -542,7 +543,7 @@ public abstract class SmartMotorController
    */
   public void updateTelemetry()
   {
-    if (telemetryTable.isPresent() && config.getVerbosity().isPresent())
+    if (telemetryTable.isPresent() && config.getVerbosity().isPresent() && config.getSmartControllerTelemetryConfig().isEmpty())
     {
       telemetry.temperature = getTemperature();
       telemetry.statorCurrent = getStatorCurrent().in(Amps);
@@ -560,6 +561,24 @@ public abstract class SmartMotorController
       {
         telemetry.distance = getMeasurementPosition();
         telemetry.linearVelocity = getMeasurementVelocity();
+      }
+      if (config.getSmartControllerTelemetryConfig().isPresent()) {
+        Object telemetryConfig = config.getSmartControllerTelemetryConfig().get();
+        if (telemetryConfig instanceof SmartMotorControllerTelemetryConfig) {
+          ((SmartMotorControllerTelemetryConfig) telemetryConfig).temperature = getTemperature();
+          ((SmartMotorControllerTelemetryConfig) telemetryConfig).statorCurrent = getStatorCurrent().in(Amps);
+          ((SmartMotorControllerTelemetryConfig) telemetryConfig).mechanismPosition = getMechanismPosition();
+          ((SmartMotorControllerTelemetryConfig) telemetryConfig).mechanismVelocity = getMechanismVelocity();
+          ((SmartMotorControllerTelemetryConfig) telemetryConfig).rotorPosition = getRotorPosition();
+          ((SmartMotorControllerTelemetryConfig) telemetryConfig).rotorVelocity = getRotorVelocity();
+          config.getMechanismLowerLimit().ifPresent(limit ->
+                  ((SmartMotorControllerTelemetryConfig) telemetryConfig).mechanismLowerLimit = getMechanismPosition().lte(limit));
+          config.getMechanismUpperLimit().ifPresent(limit ->
+                  ((SmartMotorControllerTelemetryConfig) telemetryConfig).mechanismUpperLimit = getMechanismPosition().gte(limit));
+          config.getTemperatureCutoff().ifPresent(limit ->
+                  ((SmartMotorControllerTelemetryConfig) telemetryConfig).temperatureLimit = getTemperature().gte(limit));
+          ((SmartMotorControllerTelemetryConfig) telemetryConfig).updateSpecifiedTelemetry(telemetry);
+        }
       }
       telemetry.publish(telemetryTable.get(), config.getVerbosity().get());
     }

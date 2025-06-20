@@ -33,6 +33,7 @@ import java.util.OptionalInt;
 import yams.exceptions.SmartMotorControllerConfigurationException;
 import yams.gearing.MechanismGearing;
 import yams.gearing.gearbox.MAXPlanetaryGearbox;
+import yams.telemetry.SmartMotorControllerTelemetryConfig;
 
 /**
  * Smart motor controller config.
@@ -133,6 +134,10 @@ public class SmartMotorControllerConfig
    * Telemetry verbosity setting.
    */
   private Optional<TelemetryVerbosity>      verbosity                          = Optional.empty();
+  /**
+   * Optional config for custom telemetry setup.
+   */
+  private Optional<Object> specifiedTelemetryConfig = Optional.empty();
   /**
    * Zero offset of the {@link SmartMotorController}
    */
@@ -444,6 +449,24 @@ public class SmartMotorControllerConfig
     this.telemetryName = telemetryName == null ? Optional.empty() : Optional.of(telemetryName);
     this.verbosity = verbosity == null ? Optional.empty() : Optional.of(verbosity);
     return this;
+  }
+
+  /**
+   * This is a WIP method to set specific telemetry settings. Do not use with the withTelemetry method. TODO: WIP Callback
+   * @param telemetryName Name for the {@link SmartMotorController}
+   * @param verbosity Verbosity of the Telemetry for the {@link SmartMotorController}. NOTE: Should probably default to max instead.
+   * @param telemetryConfig Config that specifies what to log.
+   * @return {@link SmartMotorControllerConfig} for chaining.
+   */
+  public SmartMotorControllerConfig withSpecificTelemetry(String telemetryName, TelemetryVerbosity verbosity, SmartMotorControllerTelemetryConfig telemetryConfig) {
+    this.telemetryName = telemetryName == null ? Optional.empty() : Optional.of(telemetryName);
+    this.verbosity = verbosity == null ? Optional.empty() : Optional.of(verbosity);
+    this.specifiedTelemetryConfig = telemetryConfig == null ? Optional.empty() : Optional.of(telemetryConfig);
+    return this;
+  }
+
+  public Optional<Object> getSmartControllerTelemetryConfig() {
+    return specifiedTelemetryConfig;
   }
 
   /**
