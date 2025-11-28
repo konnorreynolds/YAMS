@@ -33,7 +33,11 @@ import edu.wpi.first.wpilibj2.command.Commands;
 import edu.wpi.first.wpilibj2.command.RunCommand;
 import java.util.Arrays;
 import java.util.function.Supplier;
+
+import org.ironmaple.simulation.drivesims.SwerveDriveSimulation;
+import org.ironmaple.simulation.drivesims.configs.DriveTrainSimulationConfig;
 import yams.mechanisms.config.SwerveDriveConfig;
+import yams.mechanisms.swerve.simulation.MapleIMUSim;
 import yams.telemetry.MechanismTelemetry;
 
 public class SwerveDrive
@@ -134,7 +138,7 @@ public class SwerveDrive
     m_desiredModuleStatesPublisher = desiredModuleStatesTopic.publish();
     m_currentModuleStatesPublisher = currentModuleStatesTopic.publish();
 
-    // Report as YAGSL bc this will become apart of YAGSL in 2027...
+    // Report as YAGSL bc this will become a part of YAGSL in 2027...
     HAL.report(kResourceType_RobotDrive, kRobotDriveSwerve_YAGSL);
   }
 
@@ -391,7 +395,7 @@ public class SwerveDrive
     {m_simTimer.start();}
     Arrays.stream(m_modules).forEach(SwerveModule::simIterate);
     m_simGyroAngle = m_simGyroAngle.plus(Radians.of(
-        m_kinematics.toChassisSpeeds(getModuleStates()).omegaRadiansPerSecond * m_simTimer.get()));
+            m_kinematics.toChassisSpeeds(getModuleStates()).omegaRadiansPerSecond * m_simTimer.get()));
     m_simTimer.reset();
   }
 

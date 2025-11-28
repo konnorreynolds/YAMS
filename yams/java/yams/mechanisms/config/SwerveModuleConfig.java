@@ -13,6 +13,13 @@ import edu.wpi.first.units.measure.LinearVelocity;
 import java.util.Optional;
 import java.util.function.DoubleSupplier;
 import java.util.function.Supplier;
+
+import edu.wpi.first.wpilibj.RobotBase;
+import org.ironmaple.simulation.drivesims.SelfControlledSwerveDriveSimulation;
+import org.ironmaple.simulation.drivesims.SwerveModuleSimulation;
+import org.ironmaple.simulation.drivesims.configs.SwerveModuleSimulationConfig;
+import yams.exceptions.SwerveDriveConfigurationException;
+import yams.exceptions.SwerveModuleConfigurationException;
 import yams.gearing.GearBox;
 import yams.gearing.MechanismGearing;
 import yams.motorcontrollers.SmartMotorController;
@@ -28,52 +35,56 @@ public class SwerveModuleConfig
   /**
    * {@link SmartMotorController} for the {@link yams.mechanisms.swerve.SwerveModule}
    */
-  private final SmartMotorController         driveMotor;
+  private final SmartMotorController                driveMotor;
   /**
    * {@link SmartMotorController} for the {@link yams.mechanisms.swerve.SwerveModule}
    */
-  private final SmartMotorController         azimuthMotor;
+  private final SmartMotorController                azimuthMotor;
+  /**
+   * TODO
+   */
+  private       Optional<SelfControlledSwerveDriveSimulation.SelfControlledModuleSimulation>    mapleModuleSim                = Optional.empty();
   /**
    * Telemetry name.
    */
-  private       Optional<String>             telemetryName                 = Optional.empty();
+  private       Optional<String>                    telemetryName                 = Optional.empty();
   /**
    * Telemetry verbosity
    */
-  private       Optional<TelemetryVerbosity> telemetryVerbosity            = Optional.empty();
+  private       Optional<TelemetryVerbosity>        telemetryVerbosity            = Optional.empty();
   /**
    * Absolute encoder supplier for the azimuth {@link SmartMotorController}.
    */
-  private       Optional<Supplier<Angle>>    absoluteEncoderSupplier       = Optional.empty();
+  private       Optional<Supplier<Angle>>           absoluteEncoderSupplier       = Optional.empty();
   /**
    * Absolute encoder offset for the azimuth {@link SmartMotorController} to 0 with the bevel facing left.
    */
-  private       Optional<Angle>              absoluteEncoderOffset         = Optional.empty();
+  private       Optional<Angle>                     absoluteEncoderOffset         = Optional.empty();
   /**
    * Gearbox for the absolute encoder.
    */
-  private       GearBox                      absoluteEncoderGearbox        = new GearBox(new double[]{1});
+  private       GearBox                             absoluteEncoderGearbox        = new GearBox(new double[]{1});
   /**
    * Swerve module state optimization using
    * {@link edu.wpi.first.math.kinematics.SwerveModuleState#optimize(Rotation2d)}.
    */
-  private boolean                  swerveModuleStateOptimization = true;
+  private       boolean                             swerveModuleStateOptimization = true;
   /**
    * Swerve module cosine compensation.
    */
-  private boolean                  cosineCompensation            = false;
+  private       boolean                             cosineCompensation            = false;
   /**
    * Coupling ratio for the {@link yams.mechanisms.swerve.SwerveModule}.
    */
-  private GearBox                  couplingRatio;
+  private       GearBox                             couplingRatio;
   /**
    * Swerve module minimum velocity.
    */
-  private Optional<LinearVelocity> minimumVelocity               = Optional.empty();
+  private       Optional<LinearVelocity>            minimumVelocity               = Optional.empty();
   /**
    * Distance from the center of rotation for the {@link yams.mechanisms.swerve.SwerveModule}.
    */
-  private       Optional<Translation2d>      distanceFromCenterOfRotation  = Optional.empty();
+  private       Optional<Translation2d>             distanceFromCenterOfRotation  = Optional.empty();
 
   /**
    * Create the {@link SwerveModuleConfig} for the {@link yams.mechanisms.swerve.SwerveModule}
@@ -275,6 +286,18 @@ public class SwerveModuleConfig
     return this;
   }
 
+    /**
+     * TODO
+     * @param mapleModuleConfig
+     * @return
+     */
+  public SwerveModuleConfig withMapleSim(SwerveModuleSimulationConfig mapleModuleConfig) {
+      if (RobotBase.isSimulation()) {
+          this.mapleModuleSim = Optional.of(new SelfControlledSwerveDriveSimulation.SelfControlledModuleSimulation(new SwerveModuleSimulation(mapleModuleConfig)));
+      }
+      return this;
+  }
+
   /**
    * Configure telemetry for the {@link yams.mechanisms.swerve.SwerveModule} mechanism.
    *
@@ -386,6 +409,19 @@ public class SwerveModuleConfig
       state.speedMetersPerSecond *= getCosineCompensatedVelocity(state);
     }
     return state;
+  }
+
+  public Optional<SelfControlledSwerveDriveSimulation.SelfControlledModuleSimulation> getMapleModuleSim() {
+      if (RobotBase.isSimulation()) {
+          if (mapleModuleSim.isPresent()) {
+              return mapleModuleSim;
+          }
+          throw new SwerveModuleConfigurationException(
+                  "MapleModuleSim is empty!",
+                  "Cannot get MapleModuleSim!",
+                  "withMapleSim(SwerveModuleSimulationConfig)");
+      }
+      throw new RuntimeException("RobotBase is not in Simulation, MapleModuleSim is empty!");
   }
 
   /**

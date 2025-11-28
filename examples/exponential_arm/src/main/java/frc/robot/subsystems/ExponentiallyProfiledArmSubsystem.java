@@ -43,7 +43,7 @@ import yams.motorcontrollers.local.SparkWrapper;
  */
 public class ExponentiallyProfiledArmSubsystem extends SubsystemBase
 {
-
+  ///  Telemetry Options
   private final String           motorTelemetryName = "ExponentiallyProfiledArmMotor";
   private final String           mechTelemetryName  = "ExponentiallyProfiledArm";
   private final SparkMax         armMotor           = new SparkMax(1, MotorType.kBrushless);

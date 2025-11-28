@@ -1,26 +1,29 @@
 package yams.mechanisms.config;
 
-import static edu.wpi.first.units.Units.RadiansPerSecond;
-import static edu.wpi.first.units.Units.Rotations;
-import static edu.wpi.first.units.Units.Seconds;
-
 import edu.wpi.first.math.controller.PIDController;
 import edu.wpi.first.math.geometry.Pose2d;
 import edu.wpi.first.math.geometry.Rotation2d;
 import edu.wpi.first.math.geometry.Translation2d;
 import edu.wpi.first.math.kinematics.ChassisSpeeds;
-import edu.wpi.first.units.measure.Angle;
-import edu.wpi.first.units.measure.AngularVelocity;
-import edu.wpi.first.units.measure.Distance;
-import edu.wpi.first.units.measure.LinearVelocity;
-import edu.wpi.first.units.measure.Time;
+import edu.wpi.first.units.measure.*;
 import edu.wpi.first.wpilibj.RobotBase;
 import edu.wpi.first.wpilibj2.command.Subsystem;
 import java.util.Optional;
 import java.util.OptionalDouble;
 import java.util.function.Supplier;
+
+import org.ironmaple.simulation.SimulatedArena;
+import org.ironmaple.simulation.drivesims.COTS;
+import org.ironmaple.simulation.drivesims.GyroSimulation;
+import org.ironmaple.simulation.drivesims.SwerveDriveSimulation;
+import org.ironmaple.simulation.drivesims.configs.DriveTrainSimulationConfig;
+import org.ironmaple.simulation.drivesims.configs.SwerveModuleSimulationConfig;
+import yams.exceptions.SwerveDriveConfigurationException;
 import yams.mechanisms.swerve.SwerveModule;
+import yams.mechanisms.swerve.simulation.MapleIMUSim;
 import yams.motorcontrollers.SmartMotorControllerConfig.TelemetryVerbosity;
+
+import static edu.wpi.first.units.Units.*;
 
 /**
  * Swerve Drive Configuration
@@ -88,6 +91,14 @@ public class SwerveDriveConfig
    * Rotation PID controller.
    */
   private       Optional<PIDController>             rotationController            = Optional.empty();
+  /**
+   *  MapleSim Drive Simulation.
+   */
+  private       Optional<SwerveDriveSimulation>     mapleDriveSim                 = Optional.empty();
+  /**
+   *  MapleSim IMU Simulation.
+   */
+  private       Optional<GyroSimulation>               mapleIMUSim                   = Optional.empty();
   /**
    * Simulated translation PID controller.
    */
@@ -331,6 +342,23 @@ public class SwerveDriveConfig
     return this;
   }
 
+    /**
+     * Sets up MapleSim Collision support on the simulated {@link yams.mechanisms.swerve.SwerveDrive}.
+     *
+     * @param mapleConfig {@link DriveTrainSimulationConfig} for the simulated {@link yams.mechanisms.swerve.SwerveDrive}.
+     * @param startingPose initial pose of the simulated {@link yams.mechanisms.swerve.SwerveDrive}.
+     * @return {@link SwerveDriveConfig} for chaining.
+     */
+  public SwerveDriveConfig withMapleSim(DriveTrainSimulationConfig mapleConfig, Pose2d startingPose) {
+      if (RobotBase.isSimulation()) {
+          this.mapleDriveSim = Optional.of(new SwerveDriveSimulation(mapleConfig, startingPose));
+          this.mapleIMUSim = Optional.of(mapleDriveSim.get().getGyroSimulation());
+          // Register the drivetrain sim with the SimulatedArena
+          SimulatedArena.getInstance().addDriveTrainSimulation(mapleDriveSim.get());
+      }
+      return this;
+  }
+
   /**
    * Configure telemetry for the {@link yams.mechanisms.swerve.SwerveModule} mechanism.
    *
@@ -533,6 +561,33 @@ public class SwerveDriveConfig
       return translation;
     }
     return new Translation2d(translation.getNorm() * scalar, translation.getAngle());
+  }
+
+  public Optional<SwerveDriveSimulation> getMapleDriveSim() {
+    if (RobotBase.isSimulation()) {
+        if (mapleDriveSim.isPresent())
+        {
+            return mapleDriveSim;
+        }
+        throw new SwerveDriveConfigurationException(
+                "MapleDriveSim is empty!",
+                "Cannot get the MapleDriveSim!",
+                "withMapleSim(DriveTrainSimulationConfig, Pose2d)");
+    }
+    throw new RuntimeException("RobotBase is not in Simulation, MapleDriveSim is empty!");
+  }
+
+  public Optional<GyroSimulation> getMapleIMUSim() {
+    if (RobotBase.isSimulation()) {
+        if (mapleIMUSim.isPresent()) {
+            return mapleIMUSim;
+        }
+        throw new SwerveDriveConfigurationException(
+                "MapleIMUSim is empty!",
+                "Cannot get the MapleIMUSim!",
+                "withMapleSim(DriveTrainSimulationConfig, Pose2d)");
+    }
+    throw new RuntimeException("RobotBase is not in Simulation, MapleIMUSim is empty!");
   }
 
   /**
