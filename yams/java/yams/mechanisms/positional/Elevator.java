@@ -7,16 +7,20 @@ import static edu.wpi.first.units.Units.Inches;
 import static edu.wpi.first.units.Units.Kilograms;
 import static edu.wpi.first.units.Units.Meters;
 import static edu.wpi.first.units.Units.MetersPerSecond;
+import static edu.wpi.first.units.Units.Microsecond;
 import static edu.wpi.first.units.Units.Milliseconds;
 import static edu.wpi.first.units.Units.RadiansPerSecond;
+import static edu.wpi.first.units.Units.RotationsPerSecond;
 import static edu.wpi.first.units.Units.Seconds;
 import static edu.wpi.first.units.Units.Volts;
 
+import edu.wpi.first.math.filter.Debouncer.DebounceType;
 import edu.wpi.first.math.geometry.Rotation3d;
 import edu.wpi.first.math.geometry.Translation3d;
 import edu.wpi.first.math.system.plant.DCMotor;
 import edu.wpi.first.units.VoltageUnit;
 import edu.wpi.first.units.measure.Angle;
+import edu.wpi.first.units.measure.AngularAcceleration;
 import edu.wpi.first.units.measure.AngularVelocity;
 import edu.wpi.first.units.measure.Current;
 import edu.wpi.first.units.measure.Distance;
@@ -42,6 +46,7 @@ import java.util.Optional;
 import java.util.function.Supplier;
 import yams.exceptions.ElevatorConfigurationException;
 import yams.gearing.MechanismGearing;
+import yams.math.DerivativeTimeFilter;
 import yams.mechanisms.config.ElevatorConfig;
 import yams.mechanisms.config.MechanismPositionConfig;
 import yams.mechanisms.config.MechanismPositionConfig.Plane;
@@ -117,19 +122,25 @@ public class Elevator extends SmartPositionalMechanism
                                                  "Cannot create simulator",
                                                  "withStartingHeight(Distance)");
       }
+
+      boolean simulateGravity = !config.getIsElevatorHorizontal();
+
       m_sim = Optional.of(new ElevatorSim(motor.getDCMotor(),
                                           motor.getConfig().getGearing().getMechanismToRotorRatio(),
                                           config.getCarriageMass().get().in(Kilograms),
                                           config.getDrumRadius().in(Meters),
                                           config.getMinimumHeight().get().in(Meters),
                                           config.getMaximumHeight().get().in(Meters),
-                                          true,
+                                          simulateGravity,
                                           config.getStartingHeight().get().in(Meters),
                                           0.01 / 4096, 0.01 / 4096));
       m_smc.setSimSupplier(new SimSupplier()
       {
         final Supplier<Double> pos = m_sim.get()::getPositionMeters;
         final Supplier<Double> mps = m_sim.get()::getVelocityMetersPerSecond;
+        final DerivativeTimeFilter mpsps = new DerivativeTimeFilter(pos.get(),
+                                                                    smcConfig.getClosedLoopControlPeriod()
+                                                                             .orElse(Milliseconds.of(20)));
         boolean inputFed   = false;
         boolean updatedSim = false;
 
@@ -253,6 +264,12 @@ public class Elevator extends SmartPositionalMechanism
         public Current getCurrentDraw()
         {
           return Amps.of(m_sim.get().getCurrentDrawAmps());
+        }
+
+        @Override
+        public AngularAcceleration getRotorAcceleration()
+        {
+          return RotationsPerSecond.per(Microsecond).of(mpsps.derivative(getRotorVelocity().in(RotationsPerSecond)));
         }
       });
       m_mechanismWindow = new Mechanism2d(config.getMaximumHeight().get().in(Meters) * 2,
@@ -425,7 +442,7 @@ public class Elevator extends SmartPositionalMechanism
    */
   public Command setHeight(Distance height)
   {
-    return Commands.run(() -> m_smc.setPosition(height), m_subsystem).withName(m_subsystem.getName() + " SetHeight");
+    return run(height).withName(m_subsystem.getName() + " SetHeight");
   }
 
   /**
@@ -436,8 +453,62 @@ public class Elevator extends SmartPositionalMechanism
    */
   public Command setHeight(Supplier<Distance> height)
   {
-    return Commands.run(() -> m_smc.setPosition(height.get()), m_subsystem).withName(
-        m_subsystem.getName() + " SetHeight Supplier");
+    return run(height).withName(m_subsystem.getName() + " SetHeight Supplier");
+  }
+
+  /**
+   * Set the height of the elevator.
+   *
+   * @param height Height of the elevator to reach.
+   * @return {@link Command} that  sets the elevator height, stops immediately.
+   */
+  public Command run(Distance height)
+  {
+    return Commands.run(() -> m_smc.setPosition(height), m_subsystem).withName(m_subsystem.getName() + " Run Height");
+  }
+
+  /**
+   * Set the height of the elevator.
+   *
+   * @param height Height of the elevator to reach.
+   * @return {@link Command} that  sets the elevator height, stops immediately.
+   */
+  public Command run(Supplier<Distance> height)
+  {
+    return Commands.run(() -> m_smc.setPosition(height.get()), m_subsystem)
+                   .withName(m_subsystem.getName() + " Run Height Supplier");
+  }
+
+  /**
+   * Run the elevator to the desired height with a tolerance, then move on.
+   *
+   * @param height    Height to reach.
+   * @param tolerance The acceptable tolerance
+   * @return {@link Command} which will run the elevator to the desired height with a tolerance, then move on.
+   * @implNote This should NOT be used with a default command, the mechanism will not stop running after this to allow
+   * for easy chaining.
+   */
+  public Command runTo(Distance height, Distance tolerance)
+  {
+    return Commands.runOnce(() -> m_smc.setPosition(height), m_subsystem)
+                   .andThen(Commands.waitUntil(isNear(height, tolerance).debounce(0.1, DebounceType.kRising)))
+                   .withName(m_subsystem.getName() + " Run To Height");
+  }
+
+  /**
+   * Run the elevator to the desired height with a tolerance, then move on.
+   *
+   * @param height    Height to reach.
+   * @param tolerance The acceptable tolerance
+   * @return {@link Command} which will run the elevator to the desired height with a tolerance, then move on.
+   * @implNote This should NOT be used with a default command, the mechanism will not stop running after this to allow
+   * for easy chaining.
+   */
+  public Command runTo(Supplier<Distance> height, Distance tolerance)
+  {
+    return Commands.runOnce(() -> m_smc.setPosition(height.get()), m_subsystem)
+                   .andThen(Commands.waitUntil(isNear(height.get(), tolerance).debounce(0.1, DebounceType.kRising)))
+                   .withName(m_subsystem.getName() + " Run To Height Supplier");
   }
 
 

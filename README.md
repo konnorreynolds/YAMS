@@ -1,13 +1,13 @@
 # YAMS - Yet Another Mechanism System
 [![Documentation](https://github.com/Yet-Another-Software-Suite/YAMS/actions/workflows/build-pdf.yml/badge.svg)](https://github.com/Yet-Another-Software-Suite/YAMS/actions/workflows/build-pdf.yml) [![CI](https://github.com/Yet-Another-Software-Suite/YAMS/actions/workflows/ci.yml/badge.svg)](https://github.com/Yet-Another-Software-Suite/YAMS/actions/workflows/ci.yml) [![Release](https://github.com/Yet-Another-Software-Suite/YAMS/actions/workflows/release.yml/badge.svg)](https://github.com/Yet-Another-Software-Suite/YAMS/actions/workflows/release.yml)
 
-> ✨ A flexible, extensible FRC mechanism library built for elevators, arms, turrets, and more — with simulation and telemetry included.
+> A flexible, extensible FRC mechanism library built for elevators, arms, turrets, and more — with simulation and telemetry included.
 
 **YAMS** is a WPILib-compatible library that provides a **unified and extensible interface** for common FRC mechanisms like **elevators**, **arms**, and **pivots** (e.g., turrets). It emphasizes clean separation of control, simulation, and configuration, while offering first-class support for **telemetry**, **feedforward**, and **tuning**.
 
 ---
 
-## 📖 Documentation
+## Documentation
 
 [YAMS Gitbook](https://yagsl.gitbook.io/yams/documentation)
 
@@ -15,18 +15,18 @@
 
 ---
 
-## 🔧 Key Features
+## Key Features
 
-- 🧠 Unified interfaces for `Arm`, `Elevator`, and `Pivot` mechanisms  
-- ⚙️ CTRE-style configuration: familiar and readable  
-- 🛠️ SmartMotorController abstraction: consistent API for different motor vendors (REV, CTRE, etc.)  
-- 🧪 Physics-based simulation support (`simIterate()`)  
-- 📊 Built-in telemetry (works with AdvantageKit, NT, and custom logging)  
-- 🔁 Composable and declarative configuration style  
+- Unified interfaces for `Arm`, `Elevator`, and `Pivot` mechanisms  
+-  CTRE-style configuration: familiar and readable  
+- SmartMotorController abstraction: consistent API for different motor vendors (REV, CTRE, etc.)  
+- Physics-based simulation support (`simIterate()`)  
+- Built-in telemetry (works with AdvantageKit, NT, and custom logging)  
+- Composable and declarative configuration style  
 
 ---
 
-## 📦 Installation (WPILib Vendordep)
+## Installation (WPILib Vendordep)
 
 1. In **VS Code** with WPILib extension:
    - Open Command Palette (`Ctrl+Shift+P` / `Cmd+Shift+P`)
@@ -40,7 +40,7 @@
 ---
 
 
-## 📂 Examples
+## Examples
 
 The repository contains several example projects under the `/examples` folder demonstrating how to use YAMS for arms, elevators, pivots, and combined subsystems.
 
@@ -60,7 +60,7 @@ sourceSets {
 ```
 
 ---
-## 🚀 Quick Example
+## Quick Example
 
 Here’s a simplified `ArmSubsystem` using a wrapped `TalonFX`:
 
@@ -69,7 +69,8 @@ public class ArmSubsystem extends SubsystemBase {
   private final TalonFXS armMotor = new TalonFXS(1);
   private final SmartMotorController motor = new TalonFXSWrapper(armMotor, DCMotor.getNEO(1),
       new SmartMotorControllerConfig(this)
-          .withClosedLoopController(4, 0, 0, DegreesPerSecond.of(180), DegreesPerSecondPerSecond.of(90))
+          .withClosedLoopController(4, 0, 0)
+          .withTrapezoidalProfile(DegreesPerSecond.of(180), DegreesPerSecondPerSecond.of(90))
           .withSoftLimit(Degrees.of(-30), Degrees.of(100))
           .withGearing(gearing(gearbox(3, 4)))
           .withIdleMode(MotorMode.BRAKE)
@@ -106,13 +107,13 @@ More detailed examples for **Elevator** and **Pivot** mechanisms can be found in
 
 ---
 
-## 🧪 Simulation
+## Simulation
 
 Just call `simIterate()` inside `simulationPeriodic()` to simulate the mechanism’s physical behavior — based on voltage inputs, mass, length, and more.
 
 ---
 
-## 📊 Telemetry
+## Telemetry
 
 YAMS supports telemetry via its internal telemetry interfaces and `SmartMotorControllerTelemetryConfig`.
 
@@ -124,7 +125,7 @@ It integrates with:
 
 ---
 
-## 📜 License
+## License
 
 **This project is licensed under the Lesser GNU General Public License v3.0**.
 You are free to use, modify, and redistribute the software, provided that any derivative work is also licensed under LGPLv3.

@@ -4,12 +4,16 @@ import static edu.wpi.first.units.Units.Degrees;
 import static edu.wpi.first.units.Units.Inch;
 import static edu.wpi.first.units.Units.Meters;
 import static edu.wpi.first.units.Units.Radians;
+import static edu.wpi.first.units.Units.Rotations;
 
+import edu.wpi.first.math.filter.Debouncer.DebounceType;
 import edu.wpi.first.math.geometry.Rotation3d;
 import edu.wpi.first.math.geometry.Translation3d;
 import edu.wpi.first.math.system.plant.DCMotor;
 import edu.wpi.first.units.VoltageUnit;
 import edu.wpi.first.units.measure.Angle;
+import edu.wpi.first.units.measure.Distance;
+import edu.wpi.first.units.measure.LinearVelocity;
 import edu.wpi.first.units.measure.Time;
 import edu.wpi.first.units.measure.Velocity;
 import edu.wpi.first.units.measure.Voltage;
@@ -50,11 +54,11 @@ public class Arm extends SmartPositionalMechanism
   /**
    * Simulation for the arm.
    */
-  private       Optional<SingleJointedArmSim> m_sim = Optional.empty();
+  private Optional<SingleJointedArmSim> m_sim              = Optional.empty();
   /**
    * Mechanism ligament for the setpoint.
    */
-  private       MechanismLigament2d m_setpointLigament = null;
+  private MechanismLigament2d           m_setpointLigament = null;
 
   /**
    * Constructor for the Arm mechanism.
@@ -99,7 +103,7 @@ public class Arm extends SmartPositionalMechanism
                                             "Cannot create simulation.",
                                             "withHardLimit(Angle,Angle)");
       }
-      if (config.getStartingAngle().isEmpty())
+      if (config.getStartingAngle().isEmpty() && motor.getConfig().getZeroOffset().isEmpty())
       {
         throw new ArmConfigurationException("Arm starting angle is empty",
                                             "Cannot create simulation.",
@@ -112,7 +116,7 @@ public class Arm extends SmartPositionalMechanism
                                                   config.getLowerHardLimit().get().in(Radians),
                                                   config.getUpperHardLimit().get().in(Radians),
                                                   true,
-                                                  config.getStartingAngle().get().in(Radians),
+                                                  config.getStartingAngle().orElse(Rotations.zero()).in(Radians),
                                                   0.002 / 4096.0,
                                                   0.0));// Add noise with a std-dev of 1 tick
       m_smc.setSimSupplier(new ArmSimSupplier(m_sim.get(), m_smc));
@@ -134,13 +138,15 @@ public class Arm extends SmartPositionalMechanism
 
       m_mechanismLigament = m_mechanismRoot.append(new MechanismLigament2d(getName(),
                                                                            config.getLength().get().in(Meters),
-                                                                           config.getStartingAngle().get().in(Degrees),
+                                                                           config.getStartingAngle()
+                                                                                 .orElse(Rotations.zero()).in(Degrees),
                                                                            6,
                                                                            config.getSimColor()));
       m_setpointLigament = m_mechanismRoot.append(new MechanismLigament2d("Setpoint",
                                                                           config.getLength().get()
                                                                                 .in(Meters),
-                                                                          config.getStartingAngle().get()
+                                                                          config.getStartingAngle()
+                                                                                .orElse(Rotations.zero())
                                                                                 .in(Degrees),
                                                                           3,
                                                                           new Color8Bit(Color.kWhite)));
@@ -267,7 +273,7 @@ public class Arm extends SmartPositionalMechanism
    */
   public Command setAngle(Angle angle)
   {
-    return Commands.run(() -> m_smc.setPosition(angle), m_subsystem).withName(m_subsystem.getName() + " SetAngle");
+    return run(angle).withName(m_subsystem.getName() + " SetAngle");
   }
 
   /**
@@ -278,8 +284,60 @@ public class Arm extends SmartPositionalMechanism
    */
   public Command setAngle(Supplier<Angle> angle)
   {
+    return run(angle).withName(m_subsystem.getName() + " SetAngle Supplier");
+  }
+
+  /**
+   * Set the arm to the given angle.
+   *
+   * @param angle Arm angle to go to.
+   * @return {@link Command} that sets the arm to the desired angle.
+   */
+  public Command run(Angle angle)
+  {
+    return Commands.run(() -> m_smc.setPosition(angle), m_subsystem).withName(m_subsystem.getName() + " SetAngle");
+  }
+
+  /**
+   * Set the arm to the given angle via a supplier.
+   *
+   * @param angle Supplier for the arm angle to go to.
+   * @return {@link Command} that sets the arm to the desired angle.
+   */
+  public Command run(Supplier<Angle> angle)
+  {
     return Commands.run(() -> m_smc.setPosition(angle.get()), m_subsystem).withName(
-        m_subsystem.getName() + " SetAngle Supplier");
+        m_subsystem.getName() + " RunAngle Supplier");
+  }
+
+  /**
+   * Set the arm to the given angle then end the command.
+   *
+   * @param angle     {@link Angle} to go to.
+   * @param tolerance Tolerance {@link Angle}
+   * @return {@link Command} that sets the arm to the desired angle.
+   * @implNote This command will not stop. It should NOT be used when there is a default command on the Subsystem.
+   */
+  public Command runTo(Angle angle, Angle tolerance)
+  {
+    return Commands.runOnce(() -> m_smc.setPosition(angle), m_subsystem)
+                   .andThen(Commands.waitUntil(isNear(angle, tolerance).debounce(0.1, DebounceType.kRising)))
+                   .withName(m_subsystem.getName() + " RunTo Angle");
+  }
+
+  /**
+   * Set the arm to the given angle then end the command.
+   *
+   * @param angle     {@link Angle} to go to.
+   * @param tolerance Tolerance {@link Angle}
+   * @return {@link Command} that sets the arm to the desired angle.
+   * @implNote This command will stop, but the last control request to the motor controller will continue. It should NOT be used when there is a default command on the Subsystem.
+   */
+  public Command runTo(Supplier<Angle> angle, Angle tolerance)
+  {
+    return Commands.runOnce(() -> m_smc.setPosition(angle.get()), m_subsystem)
+                   .andThen(Commands.waitUntil(isNear(angle.get(), tolerance).debounce(0.1, DebounceType.kRising)))
+                   .withName(m_subsystem.getName() + " RunTo Angle Supplier");
   }
 
   /**
@@ -287,7 +345,7 @@ public class Arm extends SmartPositionalMechanism
    *
    * @param angle  {@link Angle} to be near.
    * @param within {@link Angle} within.
-   * @return Trigger on when the arm is near another angle.
+   * @return {@link Trigger} on when the arm is near another angle.
    */
   public Trigger isNear(Angle angle, Angle within)
   {
@@ -361,9 +419,9 @@ public class Arm extends SmartPositionalMechanism
 
     Command group = Commands.print("Starting SysId!")
                             .andThen(Commands.runOnce(m_smc::stopClosedLoopController))
-                            .andThen(routine.dynamic(Direction.kForward).until(maxTrigger))
+                            .andThen(routine.dynamic(Direction.kForward).until(maxTrigger).withTimeout(3))
                             .andThen(routine.dynamic(Direction.kReverse).until(minTrigger))
-                            .andThen(routine.quasistatic(Direction.kForward).until(maxTrigger))
+                            .andThen(routine.quasistatic(Direction.kForward).until(maxTrigger).withTimeout(3))
                             .andThen(routine.quasistatic(Direction.kReverse).until(minTrigger))
                             .finallyDo(m_smc::startClosedLoopController);
     if (m_config.getTelemetryName().isPresent())
@@ -415,5 +473,19 @@ public class Arm extends SmartPositionalMechanism
   public ArmConfig getArmConfig()
   {
     return m_config;
+  }
+
+  @Override
+  @Deprecated
+  public void setMeasurementVelocitySetpoint(LinearVelocity velocity)
+  {
+    throw new RuntimeException("Unimplemented");
+  }
+
+  @Override
+  @Deprecated
+  public void setMeasurementPositionSetpoint(Distance distance)
+  {
+    throw new RuntimeException("Unimplemented");
   }
 }

@@ -5,16 +5,24 @@ import static edu.wpi.first.units.Units.Amps;
 import static edu.wpi.first.units.Units.Degrees;
 import static edu.wpi.first.units.Units.DegreesPerSecond;
 import static edu.wpi.first.units.Units.DegreesPerSecondPerSecond;
+import static edu.wpi.first.units.Units.Feet;
 import static edu.wpi.first.units.Units.Meters;
+import static edu.wpi.first.units.Units.Radians;
+import static edu.wpi.first.units.Units.RadiansPerSecond;
 import static edu.wpi.first.units.Units.Second;
 import static edu.wpi.first.units.Units.Seconds;
 import static edu.wpi.first.units.Units.Volts;
-import static yams.mechanisms.SmartMechanism.gearbox;
-import static yams.mechanisms.SmartMechanism.gearing;
 
 import com.ctre.phoenix6.hardware.TalonFXS;
 import edu.wpi.first.math.controller.ArmFeedforward;
+import edu.wpi.first.math.geometry.Pose2d;
+import edu.wpi.first.math.geometry.Rotation2d;
+import edu.wpi.first.math.geometry.Rotation3d;
+import edu.wpi.first.math.geometry.Transform2d;
+import edu.wpi.first.math.geometry.Transform3d;
+import edu.wpi.first.math.geometry.Translation2d;
 import edu.wpi.first.math.geometry.Translation3d;
+import edu.wpi.first.math.kinematics.ChassisSpeeds;
 import edu.wpi.first.math.system.plant.DCMotor;
 import edu.wpi.first.units.measure.Angle;
 import edu.wpi.first.wpilibj2.command.Command;
@@ -33,41 +41,36 @@ import yams.motorcontrollers.remote.TalonFXSWrapper;
 
 public class TurretSubsystem extends SubsystemBase
 {
-  private final TalonFXS                   turretMotor = new TalonFXS(1);//, MotorType.kBrushless);
-  //  private final SmartMotorControllerTelemetryConfig motorTelemetryConfig = new SmartMotorControllerTelemetryConfig()
-//          .withMechanismPosition()
-//          .withRotorPosition()
-//          .withMechanismLowerLimit()
-//          .withMechanismUpperLimit();
-  private final SmartMotorControllerConfig motorConfig = new SmartMotorControllerConfig(this)
+
+  private final TalonFXS                   turretMotor      = new TalonFXS(1);//, MotorType.kBrushless);
+  private final SmartMotorControllerConfig motorConfig      = new SmartMotorControllerConfig(this)
       .withClosedLoopController(4, 0, 0, DegreesPerSecond.of(180), DegreesPerSecondPerSecond.of(90))
       .withSoftLimit(Degrees.of(-30), Degrees.of(100))
       .withGearing(new MechanismGearing(GearBox.fromReductionStages(3, 4)))
-//      .withExternalEncoder(armMotor.getAbsoluteEncoder())
       .withIdleMode(MotorMode.BRAKE)
       .withTelemetry("TurretMotor", TelemetryVerbosity.HIGH)
-//      .withSpecificTelemetry("TurretMotor", motorTelemetryConfig)
       .withStatorCurrentLimit(Amps.of(40))
-//      .withVoltageCompensation(Volts.of(12))
       .withMotorInverted(false)
       .withClosedLoopRampRate(Seconds.of(0.25))
       .withOpenLoopRampRate(Seconds.of(0.25))
       .withFeedforward(new ArmFeedforward(0, 0, 0, 0))
       .withControlMode(ControlMode.CLOSED_LOOP);
-  private final SmartMotorController       motor       = new TalonFXSWrapper(turretMotor,
-                                                                             DCMotor.getNEO(1),
-                                                                             motorConfig);
+  private final SmartMotorController       motor            = new TalonFXSWrapper(turretMotor,
+                                                                                  DCMotor.getNEO(1),
+                                                                                  motorConfig);
   private final MechanismPositionConfig    robotToMechanism = new MechanismPositionConfig()
       .withMaxRobotHeight(Meters.of(1.5))
       .withMaxRobotLength(Meters.of(0.75))
       .withRelativePosition(new Translation3d(Meters.of(-0.25), Meters.of(0), Meters.of(0.5)));
   private final PivotConfig                m_config         = new PivotConfig(motor)
       .withHardLimit(Degrees.of(-100), Degrees.of(200))
-      .withTelemetry("ArmExample", TelemetryVerbosity.HIGH)
+      .withTelemetry("TurretExample", TelemetryVerbosity.HIGH)
       .withStartingPosition(Degrees.of(0))
-      .withMechanismPositionConfig(robotToMechanism)
-      .withMOI(0.001);
+      .withMechanismPositionConfig(robotToMechanism);
   private final Pivot                      turret           = new Pivot(m_config);
+
+  // Robot to turret transform, from center of robot to turret.
+  private final Transform3d roboToTurret = new Transform3d(Feet.of(-1.5), Feet.of(0), Feet.of(0.5), Rotation3d.kZero);
 
   public TurretSubsystem()
   {
@@ -75,6 +78,35 @@ public class TurretSubsystem extends SubsystemBase
     //       in the constructor or in the robot coordination class, such as RobotContainer.
     //       Also, you can call addChild(name, sendableChild) to associate sendables with the subsystem
     //       such as SpeedControllers, Encoders, DigitalInputs, etc.
+  }
+
+  public Pose2d getPose(Pose2d robotPose)
+  {
+    return robotPose.plus(new Transform2d(
+        roboToTurret.getTranslation().toTranslation2d(), roboToTurret.getRotation().toRotation2d()));
+  }
+
+ public ChassisSpeeds getVelocity(ChassisSpeeds robotVelocity, Angle robotAngle)
+  {
+
+      Translation2d rRobot = roboToTurret.getTranslation().toTranslation2d(); // in robot frame
+    Translation2d rWorld = rRobot.rotateBy(Rotation2d.fromRadians(robotAngle.in(Radians))); // rotate into field frame
+
+      double omega = robotVelocity.omegaRadiansPerSecond; // robot yaw rate (rad/s)
+
+      // rotational linear velocity at turret (v_rot = ω × r_world)
+      double vRotX = -omega * rWorld.getY();
+      double vRotY =  omega * rWorld.getX();
+
+      // final turret linear velocity in field frame
+      double turretVx = robotVelocity.vxMetersPerSecond + vRotX;
+      double turretVy = robotVelocity.vyMetersPerSecond + vRotY;
+
+      // turret angular velocity in field frame
+      double turretOmega = omega + motor.getMechanismVelocity().in(RadiansPerSecond);
+
+      return new ChassisSpeeds(turretVx, turretVy, turretOmega);
+
   }
 
   public void periodic()
@@ -100,5 +132,10 @@ public class TurretSubsystem extends SubsystemBase
   public Command setAngle(Angle angle)
   {
     return turret.setAngle(angle);
+  }
+
+  public void setAngleSetpoint(Angle measure)
+  {
+    turret.setMechanismPositionSetpoint(measure);
   }
 }

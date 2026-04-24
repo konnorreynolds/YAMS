@@ -9,7 +9,9 @@ import edu.wpi.first.math.geometry.Translation2d;
 import edu.wpi.first.math.geometry.Translation3d;
 import edu.wpi.first.units.VoltageUnit;
 import edu.wpi.first.units.measure.Angle;
+import edu.wpi.first.units.measure.AngularVelocity;
 import edu.wpi.first.units.measure.Distance;
+import edu.wpi.first.units.measure.LinearVelocity;
 import edu.wpi.first.units.measure.Time;
 import edu.wpi.first.units.measure.Velocity;
 import edu.wpi.first.units.measure.Voltage;
@@ -291,6 +293,80 @@ public class DoubleJointedArm extends SmartPositionalMechanism
     });
   }
 
+  /**
+   * Set the position of the DoubleJointedArm to be at pose in meters.
+   *
+   * @param translation2d {@link Translation2d} where X is away from root, and Y is up.
+   * @param invert        Invert the eblow.
+   * @return {@link Command} that will reach the specified goal.
+   */
+  public Command run(Translation2d translation2d, boolean invert)
+  {
+    return run(() -> translation2d, () -> invert);
+  }
+
+  /**
+   * Set the position of the DoubleJointedArm to be at pose in meters.
+   *
+   * @param translation {@link Supplier<Translation2d>} where X is away from root, and Y is up.
+   * @param invert      {@link Supplier<Boolean>} Invert the eblow.
+   * @return {@link Command} that will reach the specified goal.
+   */
+  public Command run(Supplier<Translation2d> translation, Supplier<Boolean> invert)
+  {
+    return Commands.run(() -> {
+      var thetas     = getAnglesForPosition(translation.get(), invert.get());
+      var lowerAngle = thetas.getFirst();
+      var upperAngle = thetas.getSecond();
+      m_lowerSMC.setPosition(lowerAngle);
+      m_upperSMC.setPosition(upperAngle);
+    }, m_subsystem);
+  }
+
+  /**
+   * Runs to the given target and stops the command. Note, if you have a default command it will take over.
+   *
+   * @param translation2d Target position
+   * @param invert        Invert the elbow direction.
+   * @param tolerance     Tolerance
+   * @return {@link Command} that will reach the specified goal.
+   */
+  public Command runTo(Translation2d translation2d, boolean invert, Distance tolerance)
+  {
+    return runTo(() -> translation2d, () -> invert, tolerance);
+  }
+
+  /**
+   * Runs to the given target and stops the command. Note, if you have a default command it will take over.
+   *
+   * @param translation Target position
+   * @param invert      Invert the elbow direction.
+   * @param tolerance   Tolerance
+   * @return {@link Command} that will reach the specified goal.
+   */
+  public Command runTo(Supplier<Translation2d> translation, Supplier<Boolean> invert, Distance tolerance)
+  {
+    return Commands.run(() -> {
+      var thetas     = getAnglesForPosition(translation.get(), invert.get());
+      var lowerAngle = thetas.getFirst();
+      var upperAngle = thetas.getSecond();
+      m_lowerSMC.setPosition(lowerAngle);
+      m_upperSMC.setPosition(upperAngle);
+    }, m_subsystem).until(() -> isNear(translation.get(), tolerance));
+  }
+
+  /**
+   * Is near the target within tolerance
+   *
+   * @param target    Target to check
+   * @param tolerance Tolerance
+   * @return Boolean
+   */
+  public boolean isNear(Translation2d target, Distance tolerance)
+  {
+    return getPosition().getDistance(target) < tolerance.in(Meters);
+  }
+
   //    def inv_kinematics(self, pos, invert = False):
   //        """Inverse kinematics for a target position pos (x,y). Invert controls elbow direction."""
   //        [x,y] = pos.flat
@@ -493,6 +569,48 @@ public class DoubleJointedArm extends SmartPositionalMechanism
   @Override
   @Deprecated
   public Command sysId(Voltage maximumVoltage, Velocity<VoltageUnit> step, Time duration)
+  {
+    throw new RuntimeException("Unimplemented");
+  }
+
+  @Override
+  @Deprecated
+  public void setMeasurementVelocitySetpoint(LinearVelocity velocity)
+  {
+    throw new RuntimeException("Unimplemented");
+  }
+
+  @Override
+  @Deprecated
+  public void setMechanismVelocitySetpoint(AngularVelocity velocity)
+  {
+    throw new RuntimeException("Unimplemented");
+  }
+
+  @Override
+  @Deprecated
+  public void setMeasurementPositionSetpoint(Distance distance)
+  {
+    throw new RuntimeException("Unimplemented");
+  }
+
+  @Override
+  @Deprecated
+  public void setMechanismPositionSetpoint(Angle angle)
+  {
+    throw new RuntimeException("Unimplemented");
+  }
+
+  @Override
+  @Deprecated
+  public void setVoltageSetpoint(Voltage voltage)
+  {
+    throw new RuntimeException("Unimplemented");
+  }
+
+  @Override
+  @Deprecated
+  public void setDutyCycleSetpoint(double dutycycle)
   {
     throw new RuntimeException("Unimplemented");
   }

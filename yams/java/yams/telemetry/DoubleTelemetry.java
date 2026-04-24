@@ -9,6 +9,9 @@ import edu.wpi.first.networktables.DoubleSubscriber;
 import edu.wpi.first.networktables.DoubleTopic;
 import edu.wpi.first.networktables.NetworkTable;
 import edu.wpi.first.networktables.PubSub;
+import edu.wpi.first.util.datalog.DoubleLogEntry;
+import edu.wpi.first.wpilibj.DataLogManager;
+import edu.wpi.first.wpilibj.Timer;
 import java.util.Optional;
 import yams.motorcontrollers.SmartMotorControllerConfig;
 import yams.telemetry.SmartMotorControllerTelemetry.DoubleTelemetryField;
@@ -67,7 +70,14 @@ public class DoubleTelemetry
    * Data table.
    */
   private       Optional<NetworkTable>     dataTable    = Optional.empty();
+  /**
+   * NT4 Topic of this entry.
+   */
   private       DoubleTopic                topic;
+  /**
+   * {@link DoubleLogEntry} representing this entry.
+   */
+  private       Optional<DoubleLogEntry>   dataLogEntry = Optional.empty();
 
 
   /**
@@ -117,8 +127,6 @@ public class DoubleTelemetry
                      topic.publishEx("double", "{\"units\": \"" + unit + "\"}") :
                      topic.publish();
       subscriber = Optional.of(topic.subscribe(defaultValue));
-//      if (!unit.equals("none"))
-//      {topic.setProperties("{\"units\":\"" + unit + "\"}");}
       subPublisher.setDefault(defaultValue);
     } else
     {
@@ -127,16 +135,33 @@ public class DoubleTelemetry
       publisher = Optional.of(!unit.equals("none") ?
                               topic.publishEx("double", "{\"units\": \"" + unit + "\"}") :
                               topic.publish());
-//      if (!unit.equals("none"))
-//      {topic.setProperties("{\"units\": \"" + unit + "\"}");}
       publisher.get().setDefault(defaultValue);
     }
   }
 
   /**
-   * Set the unit.
-   * @param cfg {@link SmartMotorControllerConfig} used to determine the unit. If the MechanismCircumference is set it will be in meters, else it will be in degrees.
+   * Setup the {@link edu.wpi.first.util.datalog.DataLog} with this entry.
    *
+   * @param prefix The prefix to this entry in {@link edu.wpi.first.util.datalog.DataLog}
+   */
+  public void setupDataLog(String prefix)
+  {
+    if (!tunable)
+    {
+      if (!prefix.endsWith("/"))
+      {prefix += "/";}
+      prefix += unit + "/";
+      dataLogEntry = Optional.of(new DoubleLogEntry(DataLogManager.getLog(),
+                                                    prefix + key,
+                                                    (long) Timer.getFPGATimestamp()));
+    }
+  }
+
+  /**
+   * Set the unit.
+   *
+   * @param cfg {@link SmartMotorControllerConfig} used to determine the unit. If the MechanismCircumference is set it
+   *            will be in meters, else it will be in degrees.
    * @return {@link DoubleTelemetry} for chaining.
    */
   public DoubleTelemetry transformUnit(SmartMotorControllerConfig cfg)
@@ -144,26 +169,26 @@ public class DoubleTelemetry
     switch (unit)
     {
       case "tunable_position":
-        unit = cfg.getMechanismCircumference().isPresent() ? "meter" : "degrees";
+        unit = cfg.getLinearClosedLoopControllerUse() ? "meter" : "degrees";
         break;
       case "position":
-        unit = cfg.getMechanismCircumference().isPresent() ? "meter" : "rotations";
+        unit = cfg.getLinearClosedLoopControllerUse() ? "meter" : "rotations";
         break;
       case "tunable_velocity":
-        unit = cfg.getMechanismCircumference().isPresent() ? "meter_per_second"
-                                                           : "degrees_per_second";
+        unit = cfg.getLinearClosedLoopControllerUse() ? "meter_per_second"
+                                                      : "rotations_per_minute";
         break;
       case "velocity":
-        unit = cfg.getMechanismCircumference().isPresent() ? "meter_per_second"
-                                                           : "rotation_per_second";
+        unit = cfg.getLinearClosedLoopControllerUse() ? "meter_per_second"
+                                                      : "rotation_per_second";
         break;
       case "tunable_acceleration":
-        unit = cfg.getMechanismCircumference().isPresent() ? "meter_per_second_per_second"
-                                                           : "degrees_per_second_per_second";
+        unit = cfg.getLinearClosedLoopControllerUse() ? "meter_per_second_per_second"
+                                                      : "rotations_per_minute_per_second";
         break;
       case "acceleration":
-        unit = cfg.getMechanismCircumference().isPresent() ? "meter_per_second_per_second"
-                                                           : "rotation_per_second_per_second";
+        unit = cfg.getLinearClosedLoopControllerUse() ? "meter_per_second_per_second"
+                                                      : "rotation_per_second_per_second";
         break;
     }
     return this;
@@ -190,6 +215,10 @@ public class DoubleTelemetry
   {
     if (!enabled)
     {return false;}
+    if (dataLogEntry.isPresent())
+    {
+      dataLogEntry.get().append(value, (long) Timer.getFPGATimestamp());
+    }
     if (subscriber.isPresent())
     {
       double tuningValue = subscriber.get().get(defaultValue);
@@ -286,8 +315,7 @@ public class DoubleTelemetry
     subscriber.ifPresent(PubSub::close);
     if (subPublisher != null)
     {subPublisher.close();}
-    if (publisher != null)
-    {publisher.get().close();}
+    publisher.ifPresent(PubSub::close);
     dataTable.ifPresent(table -> table.getEntry(key).unpublish());
     tuningTable.ifPresent(table -> table.getEntry(key).unpublish());
   }
